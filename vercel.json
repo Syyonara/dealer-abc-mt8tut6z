@@ -9,6 +9,10 @@
       "destination": "https://abc.buzznerdrv.com/store"
     },
     {
+      "source": "/store/",
+      "destination": "https://abc.buzznerdrv.com/store/"
+    },
+    {
       "source": "/store/:path*",
       "destination": "https://abc.buzznerdrv.com/store/:path*"
     }
