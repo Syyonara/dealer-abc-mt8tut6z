@@ -8,6 +8,8 @@
       "ref": null
     }
   ],
+  "css": "",
+  "js": "",
   "nodes": [
     {
       "id": "header",
@@ -34,11 +36,13 @@
               },
               "children": [
                 {
-                  "id": "logo",
-                  "type": "logo",
+                  "id": "menu",
+                  "type": "menu",
                   "props": {
-                    "url": "/",
-                    "height": 34
+                    "layout": "horizontal",
+                    "align": "start",
+                    "depth": 2,
+                    "menuId": "main"
                   }
                 }
               ]
@@ -52,13 +56,11 @@
               },
               "children": [
                 {
-                  "id": "menu",
-                  "type": "menu",
+                  "id": "logo",
+                  "type": "logo",
                   "props": {
-                    "layout": "horizontal",
-                    "align": "start",
-                    "depth": 2,
-                    "menuId": "main"
+                    "url": "/",
+                    "height": 34
                   }
                 }
               ]
