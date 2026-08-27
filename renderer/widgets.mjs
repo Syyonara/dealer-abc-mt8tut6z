@@ -163,6 +163,34 @@ function hours(config, snapshot) {
   );
 }
 
+function listingHref(prefix, listing) {
+  if (listing.href) {
+    return listing.href.startsWith('/')
+      ? listing.href
+      : `/${prefix}/${listing.href}`;
+  }
+  return `/${prefix}/products/${listing.slug}`;
+}
+
+function listingCard(prefix, listing) {
+  const facts = Array.isArray(listing.facts) ? listing.facts.slice(0, 3) : [];
+  return `<li><a class="bz-card" href="${esc(listingHref(prefix, listing))}"${attrs(
+    tagAttrs('link', 'view-listing'),
+  )}>${image(listing.image, { placeholder: 'Photo' })}<div class="bz-card__body"><span class="bz-card__t">${esc(
+    listing.title,
+  )}</span>${listing.price ? `<span class="bz-card__m">${esc(listing.price)}</span>` : ''}${
+    facts.length
+      ? `<dl class="bz-card__facts">${join(
+          facts.map(
+            (f) =>
+              `<div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`,
+          ),
+          '',
+        )}</dl>`
+      : ''
+  }</div></a></li>`;
+}
+
 function inventoryCarousel(config, snapshot, ctx) {
   const prefix = (ctx && ctx.storefrontPrefix) || 'store';
   const items = (snapshot && snapshot.listings) || [];
@@ -172,14 +200,7 @@ function inventoryCarousel(config, snapshot, ctx) {
     `${config.heading ? `<p class="bz-widget__h">${esc(config.heading)}</p>` : ''}${
       items.length
         ? `<ul class="bz-grid bz-grid--4 bz-bare">${join(
-            items.map(
-              (l) =>
-                `<li><a class="bz-card" href="/${esc(prefix)}/${esc(l.slug)}"${attrs(
-                  tagAttrs('link', 'view-listing'),
-                )}>${image(l.image, { placeholder: 'Photo' })}<div class="bz-card__body"><span class="bz-card__t">${esc(
-                  l.title,
-                )}</span>${l.price ? `<span class="bz-card__m">${esc(l.price)}</span>` : ''}</div></a></li>`,
-            ),
+            items.map((l) => listingCard(prefix, l)),
             '',
           )}</ul>`
         : '<p class="bz-widget__empty">Live inventory loads here.</p>'
@@ -191,16 +212,34 @@ function inventoryCarousel(config, snapshot, ctx) {
 
 function inventorySearch(config, snapshot, ctx) {
   const prefix = (ctx && ctx.storefrontPrefix) || 'store';
+  const types = (snapshot && snapshot.types) || [];
+  const chips = types.length
+    ? `<div class="bz-searchbar__chips">${join(
+        types.map(
+          (t) =>
+            `<a class="bz-chip" href="/${esc(prefix)}/inventory/${esc(t.slug)}">${esc(
+              t.label,
+            )}</a>`,
+        ),
+        '',
+      )}</div>`
+    : '';
   return shell(
     'inventory-search',
     config,
-    `<form class="bz-searchbar" role="search" action="/${esc(prefix)}" method="get"${attrs(
+    `${config.heading ? `<p class="bz-widget__h">${esc(config.heading)}</p>` : ''}<form class="bz-searchbar" role="search" action="/${esc(
+      prefix,
+    )}/search" method="get"${attrs(
       tagAttrs('form', 'inventory-search'),
     )}><label class="bz-sr" for="bz-wsearch">Search inventory</label><input class="bz-input" id="bz-wsearch" name="q" type="search" placeholder="${esc(
-      config.placeholder || 'Search inventory…',
+      config.placeholder || 'Search make, model or stock #…',
     )}" /><button class="bz-btn bz-btn--primary" type="submit"${attrs(
       tagAttrs('cta', 'inventory-search'),
-    )}>Search</button></form>`,
+    )}>Search</button></form>${chips}`,
+    // Not hydrated. The chips are product types, which change when the dealer
+    // reorganises their catalogue — not between one visitor and the next — and
+    // the committed snapshot already carries them. Refreshing them would put a
+    // request on every page load of a static site to redraw the same chips.
     { hydrate: false },
   );
 }

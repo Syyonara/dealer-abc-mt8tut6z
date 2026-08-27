@@ -124,7 +124,8 @@ function ancestorsOf(nodes, id) {
  * boundary the server validator enforces on AI replies, applied again here so a
  * reply that slipped through (or a stale client) still cannot touch anything the
  * dealer did not select. Destructive ops (update, remove, move, wrap) must name
- * the scope node or a descendant; insert may also land beside the scope node.
+ * the scope node or a descendant; insert may target any container the scope node
+ * sits inside, up to the page root, because adding destroys nothing.
  * Nodes inserted within this batch count as in scope — they are new, so nothing
  * the dealer made can be lost through them.
  */
@@ -150,11 +151,15 @@ export function applyOps(raw, ops, options = {}) {
     if (addedIds.has(id)) return true;
     return id === scope || ancestorsOf(document.nodes, id).includes(scope);
   };
+  // Anywhere the selection already sits. Restricting this to the selection's
+  // direct parent made "put a band above this" unexpressible: a section is only
+  // legal at the page root, and the node the dealer clicked is rarely the one the
+  // new node has to sit next to.
   const insertAllowed = parentId => {
     if (!scope) return true;
     if (parentId != null && withinScope(parentId)) return true;
-    const parentOfScope = ancestorsOf(document.nodes, scope)[0] ?? null;
-    return parentOfScope === (parentId ?? null);
+    if (parentId == null) return true;
+    return ancestorsOf(document.nodes, scope).includes(parentId);
   };
   const trackAdded = node => {
     if (!isObject(node)) return;

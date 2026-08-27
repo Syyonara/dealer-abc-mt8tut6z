@@ -84,6 +84,13 @@
     target.dataset.bzMounted = '1';
   }
 
+  function listingHref(listing) {
+    if (listing.href) {
+      return listing.href.charAt(0) === '/' ? listing.href : API + '/' + listing.href;
+    }
+    return API + '/products/' + listing.slug;
+  }
+
   function renderListings(node, listings) {
     var list = node.querySelector('ul');
     if (!list || !listings || !listings.length) return;
@@ -91,7 +98,7 @@
     listings.forEach(function (l) {
       var li = document.createElement('li');
       var a = el('a', 'bz-card');
-      a.href = API + '/' + l.slug;
+      a.href = listingHref(l);
       a.setAttribute('data-bz-el', 'link');
       a.setAttribute('data-bz-intent', 'view-listing');
       if (l.image && l.image.src) {
@@ -106,6 +113,16 @@
       var body = el('div', 'bz-card__body');
       body.appendChild(el('span', 'bz-card__t', l.title));
       if (l.price) body.appendChild(el('span', 'bz-card__m', l.price));
+      if (l.facts && l.facts.length) {
+        var dl = el('dl', 'bz-card__facts');
+        l.facts.slice(0, 3).forEach(function (f) {
+          var wrap = document.createElement('div');
+          wrap.appendChild(el('dt', '', f.label));
+          wrap.appendChild(el('dd', '', f.value));
+          dl.appendChild(wrap);
+        });
+        body.appendChild(dl);
+      }
       a.appendChild(body);
       li.appendChild(a);
       list.appendChild(li);
@@ -233,10 +250,14 @@
     form.addEventListener('input', function () { applyLogic(form); });
     form.addEventListener('change', function () { applyLogic(form); });
     form.addEventListener('submit', function (event) {
-      // Let the browser enforce validation first; only then take over the POST so
-      // a non-JS submit still reaches the same endpoint.
-      if (!form.checkValidity()) return;
+      // Always take the navigation: inside a preview frame the action URL is not
+      // a page, and following it blanks the document. On the published site the
+      // same handler still POSTs via fetch after validation.
       event.preventDefault();
+      if (!form.checkValidity()) {
+        if (form.reportValidity) form.reportValidity();
+        return;
+      }
       submitForm(form);
     });
   }
@@ -339,6 +360,27 @@
     return parts(root, name)[0] || null;
   }
 
+  /**
+   * Wire a behaviour control, and stop it doing anything else.
+   *
+   * A control is whatever the dealer placed there, and that is usually a CTA —
+   * which the renderer emits as an <a>, because a button block's items are
+   * links. Following that href is never what pressing "Next" or "Back to top"
+   * means; the url is only present because the block requires one. Left alone
+   * the browser navigates anyway, which on a published page jumps to an anchor
+   * mid-interaction and inside an editor frame replaces the document entirely.
+   *
+   * So the default action is cancelled for every control, whatever tag it is.
+   */
+  function onControl(node, handler) {
+    if (!node) return;
+    if (node.tagName === 'BUTTON' && !node.getAttribute('type')) node.type = 'button';
+    node.addEventListener('click', function (event) {
+      event.preventDefault();
+      handler(event);
+    });
+  }
+
   var REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   function scrollMode() {
@@ -432,8 +474,8 @@
       track.scrollBy({ left: direction * stride() * perMove, behavior: scrollMode() });
     }
 
-    if (prev) prev.addEventListener('click', function () { go(-1); });
-    if (next) next.addEventListener('click', function () { go(1); });
+    onControl(prev, function () { go(-1); });
+    onControl(next, function () { go(1); });
 
     track.addEventListener('keydown', function (event) {
       if (event.key === 'ArrowRight') { event.preventDefault(); go(1); }
@@ -506,8 +548,7 @@
     }
 
     controls.forEach(function (control) {
-      if (control.tagName === 'BUTTON' && !control.getAttribute('type')) control.type = 'button';
-      control.addEventListener('click', function () {
+      onControl(control, function () {
         var facet = control.getAttribute('data-bz-facet') || 'tag';
         var value = (control.getAttribute('data-bz-value') || '').toLowerCase();
         // An "all" chip clears its facet; clicking the active chip again also
@@ -610,7 +651,6 @@
     root.setAttribute('data-bz-drawer', '');
     if (!panel.id) panel.id = 'bz-drawer-' + Math.random().toString(36).slice(2, 8);
     toggle.setAttribute('aria-controls', panel.id);
-    if (toggle.tagName === 'BUTTON' && !toggle.getAttribute('type')) toggle.type = 'button';
 
     function set(open) {
       setFlag(root, 'data-open', open);
@@ -619,12 +659,12 @@
     }
 
     set(false);
-    toggle.addEventListener('click', function () {
+    onControl(toggle, function () {
       set(!root.hasAttribute('data-open'));
     });
 
     parts(root, 'close').forEach(function (button) {
-      button.addEventListener('click', function () { set(false); });
+      onControl(button, function () { set(false); });
     });
 
     document.addEventListener('keydown', function (event) {
@@ -683,8 +723,8 @@
 
     var prev = part(root, 'prev');
     var next = part(root, 'next');
-    if (prev) prev.addEventListener('click', function () { show(current - 1); stop(); });
-    if (next) next.addEventListener('click', function () { show(current + 1); stop(); });
+    onControl(prev, function () { show(current - 1); stop(); });
+    onControl(next, function () { show(current + 1); stop(); });
 
     var timer = null;
     function stop() {
@@ -734,8 +774,7 @@
     );
 
     parts(root, 'totop').forEach(function (button) {
-      if (button.tagName === 'BUTTON' && !button.getAttribute('type')) button.type = 'button';
-      button.addEventListener('click', function () {
+      onControl(button, function () {
         window.scrollTo({ top: 0, behavior: scrollMode() });
       });
     });

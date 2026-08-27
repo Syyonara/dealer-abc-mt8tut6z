@@ -508,7 +508,7 @@ const BLOCKS = {
       const search = props.showSearch
         ? `<form class="bz-herosearch" action="/${
             (ctx && ctx.storefrontPrefix) || 'store'
-          }" method="get" role="search"${attrs(tagAttrs('form', 'inventory-search'))}>
+          }/search" method="get" role="search"${attrs(tagAttrs('form', 'inventory-search'))}>
   <label class="bz-herosearch__l" for="bz-hero-q">Search inventory</label>
   <input class="bz-input" id="bz-hero-q" name="q" type="search" placeholder="Search inventory…" />
   <button class="bz-btn bz-btn--primary" type="submit"${attrs(

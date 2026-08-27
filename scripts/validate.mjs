@@ -205,6 +205,15 @@ const CONDITION_IDS = CONDITION_TYPES.map(c => c.id);
 const pageSlugs = new Set(pages.map(p => p.slug));
 let sitewideTemplate = false;
 
+/* Component ids have to exist before pages and templates are checked — a
+   `sharedSection` on a page names one of these, and `checkReferences` reads
+   the set. Validation of the component files themselves still happens later. */
+const sectionIds = new Set();
+for (const file of listJson(join(SITE, 'sections'))) {
+  const { value } = readJson(join(SITE, 'sections', file));
+  sectionIds.add(value?.id ?? file.replace(/\.json$/, ''));
+}
+
 /* ----------------------------------------------------------- page documents */
 
 const templateIds = new Set();
@@ -258,6 +267,7 @@ for (const file of listJson(join(SITE, 'templates'))) {
   for (const issue of errors) fail(rel(path), issue.path, issue.message);
   for (const issue of warnings) note(rel(path), `${issue.path}: ${issue.message}`);
   reportUnknownTypes(rel(path), parsed.nodes);
+  checkReferences(rel(path), parsed.nodes);
   reportStackedSiblings(rel(path), parsed.nodes);
   reportRepeatedShapes(rel(path), parsed.nodes);
   collectBehaviours(parsed.nodes);
@@ -306,7 +316,6 @@ for (const page of pages) {
 
 /* ---------------------------------------------------- sections (components) */
 
-const sectionIds = new Set();
 for (const file of listJson(join(SITE, 'sections'))) {
   const path = join(SITE, 'sections', file);
   const { value, error } = readJson(path);
@@ -354,6 +363,13 @@ reportScriptedMotion();
 
 /* -------------------------------------------------------------------- menus */
 
+const storefrontPrefix = String(
+  (existsSync(join(ROOT, 'dealer.config.json'))
+    ? readJson(join(ROOT, 'dealer.config.json')).value?.storefrontPrefix
+    : null) || 'store',
+).replace(/^\/+|\/+$/g, '');
+const storefrontUrl = new RegExp(`^/${storefrontPrefix}(?:[/?#]|$)`);
+
 const menusPath = join(SITE, 'menus.json');
 if (existsSync(menusPath)) {
   const { value, error } = readJson(menusPath);
@@ -376,6 +392,20 @@ if (existsSync(menusPath)) {
             fail('site/menus.json', `${at}.ref`, `no page with slug "${item.ref}"`, 'Menu items point at a page by slug, not by address.');
           }
           if (item?.type === 'url' && !item.url) fail('site/menus.json', `${at}.url`, 'a url item needs a url');
+          if (item?.type === 'url' && storefrontUrl.test(String(item.url ?? ''))) {
+            fail(
+              'site/menus.json',
+              `${at}.url`,
+              `"${item.url}" types out the storefront prefix`,
+              'The prefix is configuration and changes without warning this file. Use { "type": "inventory", "ref": "…" }, where ref names the route — "inventory", "parts", "search", optionally with a query string.',
+            );
+          }
+          if (item?.type === 'inventory' && !item.ref) {
+            note(
+              'site/menus.json',
+              `${at} ("${item.label}") points at the storefront's landing page, because it names no route — "inventory" or "parts" is usually what a nav item this deep means`,
+            );
+          }
           walk(item?.children, `${at}.children`);
         }
       };

@@ -321,16 +321,27 @@ test('scope: updating and wrapping the selected node itself is allowed', () => {
   assert.equal(document.nodes[0].children[0].children[0].props.span, 4);
 });
 
-test('scope: insert lands beside the selection but never further out', () => {
+test('scope: insert lands beside the selection, or beside anything it sits inside', () => {
   const beside = applyOps(scopedDoc(), [
     { op: 'insert', parentId: 'r', node: { id: 'c3', type: 'column', props: { span: 4 }, children: [] } },
   ], { scopeId: 'c1' });
   assert.deepEqual(beside.rejected, []);
 
-  const farOut = applyOps(scopedDoc(), [
-    { op: 'insert', parentId: null, node: { id: 's2', type: 'section', props: {}, children: [] } },
+  // "Put a band above this" can only be said at the page root, and the selected
+  // column sits inside it. Adding destroys nothing, so this is allowed.
+  const above = applyOps(scopedDoc(), [
+    { op: 'insert', parentId: null, index: 0, node: { id: 's2', type: 'section', props: {}, children: [] } },
   ], { scopeId: 'c1' });
-  assert.equal(farOut.rejected.length, 1);
+  assert.deepEqual(above.rejected, []);
+  assert.equal(above.document.nodes[0].id, 's2');
+});
+
+test('scope: insert into a node the selection does not sit inside is still rejected', () => {
+  const sideways = applyOps(scopedDoc(), [
+    { op: 'insert', parentId: 'c2', node: { id: 'h2', type: 'heading', props: { text: 'a' } } },
+  ], { scopeId: 'c1' });
+  assert.equal(sideways.rejected.length, 1);
+  assert.ok(/outside the selection/.test(sideways.rejected[0].reason));
 });
 
 test('scope: a stale selection rejects the whole batch instead of disabling the boundary', () => {
@@ -605,6 +616,19 @@ test('display conditions resolve by specificity, most specific first', () => {
   assert.equal(resolveTemplate({ kind: 'post', slug: 'x' }, templates).template.id, 'site');
 });
 
+test('an inventory condition covers the parts catalogue until a parts one exists', () => {
+  const site = { ...TEMPLATE, id: 'site', conditions: [{ type: 'entireSite' }] };
+  const inventory = { ...TEMPLATE, id: 'inv', conditions: [{ type: 'inventory' }] };
+  const parts = { ...TEMPLATE, id: 'parts', conditions: [{ type: 'parts' }] };
+
+  // Adding the parts condition must not strand the parts pages of every site
+  // that already has one inventory template and no idea this exists.
+  assert.equal(resolveTemplate({ kind: 'parts' }, [site, inventory]).template.id, 'inv');
+  assert.equal(resolveTemplate({ kind: 'parts' }, [site, inventory, parts]).template.id, 'parts');
+  assert.equal(resolveTemplate({ kind: 'inventory' }, [site, inventory, parts]).template.id, 'inv');
+  assert.equal(resolveTemplate({ kind: 'inventory' }, [site, parts]).template.id, 'site');
+});
+
 test('the home page is not a special case — it is a page with a condition', () => {
   const templates = [
     { ...TEMPLATE, id: 'site', conditions: [{ type: 'entireSite' }] },
@@ -694,7 +718,25 @@ test('a menu is structure only — no locations, no styling', () => {
 });
 
 test('a menu renders nested items as a nested list', () => {
-  const html = renderMenu(menus, 'main', CTX);
+  const sample = {
+    version: 3,
+    menus: [
+      {
+        id: 'main',
+        name: 'Main',
+        items: [
+          {
+            id: 'about',
+            label: 'About',
+            type: 'url',
+            url: '/about',
+            children: [{ id: 'about-team', label: 'Our team', type: 'url', url: '/about#team' }],
+          },
+        ],
+      },
+    ],
+  };
+  const html = renderMenu(sample, 'main', CTX);
   assert.match(html, /data-bz-menu="main"/);
   assert.match(html, /bz-subnav/);
   assert.match(html, /Our team/);

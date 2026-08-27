@@ -297,6 +297,10 @@ function chromeFor(target) {
       id: key,
       header: renderDocument({ nodes: before }, renderCtx),
       footer: renderDocument({ nodes: after }, renderCtx),
+      // A template's own script is part of its chrome — a sticky header is the
+      // usual case — so the storefront has to load it alongside the markup it
+      // enhances, or inventory pages get the header without the behaviour.
+      scripts: templateScript(resolved.template),
     });
   }
   return chromeCache.get(key);
@@ -552,6 +556,11 @@ ${posts
 const storefrontRoutes = [
   { pattern: `/${PREFIX}`, target: { kind: 'inventory' } },
   { pattern: `/${PREFIX}/*`, target: { kind: 'inventory' } },
+  // Listed after the catch-all deliberately: the storefront resolves a path by
+  // longest matching prefix, not by table order, so these only take effect for
+  // a site that actually has a Parts template.
+  { pattern: `/${PREFIX}/parts`, target: { kind: 'parts' } },
+  { pattern: `/${PREFIX}/parts/*`, target: { kind: 'parts' } },
   ...emitted.map((p) => ({ pattern: p.path, target: { kind: 'page', slug: p.slug, group: p.group } })),
   ...posts.map((post) => ({ pattern: `${blogBase}/${post.slug}`, target: { kind: 'post', slug: post.slug } })),
 ];
@@ -560,17 +569,28 @@ const chromeManifest = {};
 const table = [];
 for (const route of storefrontRoutes) {
   const chrome = chromeFor(route.target);
-  const key = chrome.id === defaultChrome.id ? 'default' : chrome.id;
+  // Keyed by template id, never by the word "default". Naming the canonical
+  // chrome "default" collided with a template whose id genuinely is `default`:
+  // the first one to claim the key kept it and the other was dropped, so once a
+  // site had an Inventory template its ordinary pages were served the inventory
+  // header. Which entry is canonical is stated separately, below.
+  const key = chrome.id;
+  const canonical = chrome.id === defaultChrome.id;
   if (!chromeManifest[key]) {
-    if (key !== 'default') {
+    if (!canonical) {
       write(`partials/header--${key}.html`, chrome.header);
       write(`partials/footer--${key}.html`, chrome.footer);
     }
     chromeManifest[key] = {
-      header: key === 'default' ? '/partials/header.html' : `/partials/header--${key}.html`,
-      footer: key === 'default' ? '/partials/footer.html' : `/partials/footer--${key}.html`,
+      header: canonical ? '/partials/header.html' : `/partials/header--${key}.html`,
+      footer: canonical ? '/partials/footer.html' : `/partials/footer--${key}.html`,
       styles: ['/partials/tokens.css', '/partials/reset.css', '/partials/blocks.css', '/partials/chrome.css'],
-      scripts: ['/partials/chrome.js', '/partials/widgets.js'],
+      scripts: [
+        '/partials/chrome.js',
+        '/partials/widgets.js',
+        ...(CUSTOM.hasJs ? ['/scripts/custom.js'] : []),
+        ...chrome.scripts,
+      ],
       template: chrome.id,
     };
   }
@@ -588,6 +608,10 @@ write(
       storefrontPrefix: PREFIX,
       fontsHref: FONTS_HREF,
       chrome: chromeManifest,
+      // Which chrome to use for a path no route names. Older manifests implied
+      // this by calling the entry "default"; saying it outright is what lets the
+      // entries be keyed by template id instead.
+      defaultChrome: defaultChrome.id,
       routes: table,
     },
     null,
